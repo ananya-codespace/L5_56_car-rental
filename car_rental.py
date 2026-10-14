@@ -1,5 +1,5 @@
 
-"""Car rental system used for the static code analysis lab."""
+"""Car rental system for the static code analysis lab."""
 
 import hashlib
 import os
@@ -18,9 +18,14 @@ conn.execute(
 )
 
 
-def addCar(plate, model="Unknown", daily_rate=0, features=[]):
+def add_car(plate, model="Unknown", daily_rate=0, features=None):
+    """Add a car to the fleet and return its details."""
     if not plate:
-        return
+        return None
+
+    if features is None:
+        features = []
+
     fleet[plate] = {
         "model": model,
         "rate": daily_rate,
@@ -30,20 +35,23 @@ def addCar(plate, model="Unknown", daily_rate=0, features=[]):
     return fleet[plate]
 
 
-def registerCustomer(name, licence, phone):
+def register_customer(name, licence, phone):
+    """Register a customer using a parameterized SQL query."""
     conn.execute(
         "INSERT INTO customers VALUES (?, ?, ?)",
         (name, licence, phone),
     )
 
 
-def findCustomer(name):
+def find_customer(name):
+    """Return customer records matching the supplied name."""
     query = "SELECT * FROM customers WHERE name = ?"
     return conn.execute(query, (name,)).fetchall()
 
 
-def rentCar(plate, customer, start, end):
-    if not findCustomer(customer):
+def rent_car(plate, customer, start, end):
+    """Book an available car and return the total rental cost."""
+    if not find_customer(customer):
         raise ValueError("Customer not registered")
 
     if plate not in fleet:
@@ -67,7 +75,7 @@ def rentCar(plate, customer, start, end):
     fleet[plate]["available"] = False
     bookings.append(
         {
-            "code": bookingCode(),
+            "code": booking_code(),
             "plate": plate,
             "customer": customer,
             "days": days,
@@ -77,7 +85,8 @@ def rentCar(plate, customer, start, end):
     return cost
 
 
-def returnCar(plate, km_driven):
+def return_car(plate, km_driven):
+    """Mark a car as available and calculate any extra-distance charge."""
     if plate not in fleet:
         return None
 
@@ -87,15 +96,17 @@ def returnCar(plate, km_driven):
     return 0
 
 
-def bookingCode():
+def booking_code():
+    """Generate a booking code using a secure random generator."""
     return "BK-" + str(secrets.randbelow(90000) + 10000)
 
 
-def licenceHash(licence):
+def licence_hash(licence):
+    """Return the SHA-256 digest of a licence string."""
     return hashlib.sha256(licence.encode("utf-8")).hexdigest()
 
 
-def applyPromo(rule, amount):
+def apply_promo(rule, amount):
     """Apply a supported percentage multiplier without executing code."""
     match = re.fullmatch(
         r"\s*amount\s*=\s*amount\s*\*\s*(\d+(?:\.\d+)?)\s*",
@@ -111,13 +122,19 @@ def applyPromo(rule, amount):
     return amount * multiplier
 
 
-def isValidPlate(plate):
-    return bool(re.fullmatch(r"[A-Z]{2}[0-9]{2}[A-Z]{1,2}[0-9]{4}", plate))
+def is_valid_plate(plate):
+    """Check whether a number plate matches the expected format."""
+    return bool(
+        re.fullmatch(r"[A-Z]{2}[0-9]{2}[A-Z]{1,2}[0-9]{4}", plate)
+    )
 
 
-def writeReceipt(booking):
+def write_receipt(booking):
+    """Create a receipt file and return its path."""
     file_descriptor, path = tempfile.mkstemp(suffix=".txt")
-    with os.fdopen(file_descriptor, "w", encoding="utf-8") as receipt:
+    with os.fdopen(
+        file_descriptor, "w", encoding="utf-8"
+    ) as receipt:
         receipt.write(
             f"Booking {booking['code']}: {booking['plate']} "
             f"for {booking['days']} days = Rs.{booking['cost']}\n"
@@ -125,7 +142,8 @@ def writeReceipt(booking):
     return path
 
 
-def adminLogin(user, password):
+def admin_login(user, password):
+    """Authenticate an administrator using configured environment values."""
     expected_user = os.environ.get("CAR_RENTAL_ADMIN_USER")
     expected_password = os.environ.get("CAR_RENTAL_ADMIN_PASSWORD")
 
@@ -138,32 +156,42 @@ def adminLogin(user, password):
     )
 
 
-def availableCars():
-    result = []
-    for plate in fleet:
-        if fleet[plate]["available"]:
-            result.append(plate)
-    return result
+def available_cars():
+    """Return the number plates of all currently available cars."""
+    return [
+        plate
+        for plate, details in fleet.items()
+        if details["available"]
+    ]
 
 
 def main():
-    addCar("KA01AB1234", "Swift", 1500)
-    addCar("KA02CD5678", "Innova", 3000)
-    addCar("KA03EF9999", "Nexon", -500)
+    """Run the car rental demonstration."""
+    add_car("KA01AB1234", "Swift", 1500)
+    add_car("KA02CD5678", "Innova", 3000)
+    add_car("KA03EF9999", "Nexon", -500)
 
-    registerCustomer("Ravi", "DL-0420110012345", "9845012345")
-    registerCustomer("Meera", "DL-0420110099999", "9845099999")
+    register_customer("Ravi", "DL-0420110012345", "9845012345")
+    register_customer("Meera", "DL-0420110099999", "9845099999")
 
-    print("Rent Swift:", rentCar("KA01AB1234", "Ravi", "2026-11-01", "2026-11-04"))
-
-    print("Extra km charge:", returnCar("KA01AB1234", 420))
-    print("Return unknown car:", returnCar("XX00XX0000", 50))
-    print("Promo price:", applyPromo("amount = amount * 0.9", 4500))
-    print("Plate valid?", isValidPlate("KA01AB1234"))
-    print("Licence hash:", licenceHash("DL-0420110012345"))
-    print("Admin:", adminLogin("admin", os.environ.get("CAR_RENTAL_ADMIN_PASSWORD", "")))
-    print("Available:", availableCars())
-    print("Receipt saved to:", writeReceipt(bookings[0]))
+    print(
+        "Rent Swift:",
+        rent_car("KA01AB1234", "Ravi", "2026-11-01", "2026-11-04"),
+    )
+    print("Extra km charge:", return_car("KA01AB1234", 420))
+    print("Return unknown car:", return_car("XX00XX0000", 50))
+    print("Promo price:", apply_promo("amount = amount * 0.9", 4500))
+    print("Plate valid?", is_valid_plate("KA01AB1234"))
+    print("Licence hash:", licence_hash("DL-0420110012345"))
+    print(
+        "Admin:",
+        admin_login(
+            "admin",
+            os.environ.get("CAR_RENTAL_ADMIN_PASSWORD", ""),
+        ),
+    )
+    print("Available:", available_cars())
+    print("Receipt saved to:", write_receipt(bookings[0]))
 
 
 if __name__ == "__main__":
